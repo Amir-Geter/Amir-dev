@@ -6,11 +6,7 @@ Work through the steps in order. If something is missing, fix it and continue. D
 
 ## Step 0 - Token
 
-Open the workspace URL in your built-in browser.
-- If a login page appears, tell the user "please sign in in the browser pane" and wait until the workspace loads. Never type credentials yourself.
-- In that tab, run `fetch('/conf', {cache: 'no-store'}).then(r => r.json())` and read the `token` field. That is TOKEN; it starts with `soc_`. Keep it in memory only.
-- If the token is empty, the user is not an Admin in this workspace or it is a playground tenant. Tell them and stop.
-- If you have no browser tool, ask the user to paste the token, then continue.
+The user's ScaleOps token is already in the `SCALEOPS_TOKEN` environment variable. Never read, echo or print its value. Check only that it is set: `test -n "$SCALEOPS_TOKEN" && echo set || echo missing`. If it is missing, tell the user to run `read -s SCALEOPS_TOKEN && export SCALEOPS_TOKEN`, paste the token from their ScaleOps install screen, and restart you from that shell. Then stop.
 
 ## Step 1 - Tools
 
@@ -31,8 +27,8 @@ Run exactly (the `$(...)` is intentional, let the shell expand it):
 ```bash
 helm install --create-namespace -n scaleops-system \
   --repo https://registry.scaleops.com/charts \
-  --username scaleops --password TOKEN \
-  --set scaleopsToken=TOKEN \
+  --username scaleops --password "$SCALEOPS_TOKEN" \
+  --set scaleopsToken="$SCALEOPS_TOKEN" \
   --set clusterName=WORKSPACE-$(kubectl config current-context) \
   scaleops scaleops
 ```
@@ -58,4 +54,4 @@ Five lines: cluster name, node count, pods ready, recommendations found, dashboa
 
 ## Rules
 
-Never write the token to a file. Never repeat the token in your messages. Never change the kube context without asking. Never delete anything.
+Never read, write, echo or repeat the token; only pass it through the environment variable. Never change the kube context without asking. Never delete anything.
