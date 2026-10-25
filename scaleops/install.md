@@ -18,22 +18,24 @@ Run `kubectl config current-context` and `kubectl get nodes --no-headers | wc -l
 
 ## Step 3 - Options
 
-Read the `Enable:` line from the user's message. If it says `default` or is missing, the selection is: rightsizing only. Show the selection and ask once, with a selectable list where your tool supports it, whether to adjust. Options and their Helm flags:
+Read the `Enable:` line from the user's message. It lists exactly what the user ticked on the install page; use it as given. Do not ask whether to adjust and do not label anything as recommended. State the selection in one line, then map it to Helm flags:
 
-| Option | Helm flag |
+| Option in `Enable:` | Helm flag |
 |---|---|
+| AI SRE Agent | nothing; it is on by default. If it is absent from the line, add `--set scaleopsAI.enabled=false` |
 | GPU optimization | `--set gpu.enabled=true` |
 | Network observability | `--set global.observability.enabled=true` |
 | OpenShift | `--set global.openShift=true` (and use `oc config current-context` for the cluster name) |
 
-Collect the chosen flags into FLAGS (may be empty).
+If the line is missing entirely, use no flags. Collect the result into FLAGS (may be empty).
 
 ## Step 4 - Token and install
 
-The token must never pass through the chat. Write the installer below to a temp file, substituting CLUSTER (the context name from step 2) and FLAGS, then run it in a terminal the user can see:
+The token must never pass through the chat. Write the installer below to a temp file, substituting CLUSTER (the context name from step 2) and FLAGS. The installer is interactive: it waits for the user to paste the token. It must run in a terminal the user can see and type into, never through your own command tool, which has no keyboard:
 
-- Claude Code: open a new terminal tab in the IDE and run `bash <path>` there.
+- Claude Code: use the Terminal panel tool to run `bash <path>` in a new terminal tab, and show that tab. Then tell the user: "The installer is waiting in the terminal tab for your token." Read the tab's output to follow progress.
 - Cursor or Codex: run `bash <path>` in the integrated terminal.
+- If you have no way to run a command in a visible terminal, print `bash <path>` and ask the user to run it in their terminal and tell you when it has finished.
 
 ```bash
 #!/usr/bin/env bash
