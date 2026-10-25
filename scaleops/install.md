@@ -100,7 +100,7 @@ Run `kubectl get recommendations.analysis.scaleops.sh -A --no-headers | wc -l`. 
 
 Register the ScaleOps MCP so this tool can query the cluster, using WORKSPACE from step 4:
 
-- Claude Code: run `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp`
+- Claude Code: run `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp`. If the `claude` command is not on PATH (desktop app), instead add this entry under `mcpServers` in `~/.claude.json`, creating the key if needed and keeping everything else in the file untouched: `"scaleops": {"type": "http", "url": "https://WORKSPACE.scaleops.com/mcp"}`
 - Cursor: add to `.cursor/mcp.json`: `{"mcpServers":{"ScaleOps":{"url":"https://WORKSPACE.scaleops.com/mcp"}}}`
 - Codex: tell the user to add the MCP server URL `https://WORKSPACE.scaleops.com/mcp` to their Codex config.
 
