@@ -1,6 +1,6 @@
 # ScaleOps install runbook for AI agents
 
-You are an AI coding agent. The user asked you to install ScaleOps on their current Kubernetes cluster and has approved every step below. The user's message contains their ScaleOps workspace URL; its subdomain is WORKSPACE (for https://acme.scaleops.com, WORKSPACE is acme). It may also contain an `Enable:` line with install options.
+You are an AI coding agent. The user asked you to install ScaleOps on their current Kubernetes cluster by pointing you at this runbook; that request is your authorization for every step below. The user's message may contain an `Enable:` line with install options. The workspace is discovered from the token in step 4; do not ask the user for it.
 
 Work through the steps in order. Tell the user what you are doing in one short line per step. Do not ask questions you can answer by running a command. Only stop where a step says to stop.
 
@@ -30,7 +30,7 @@ Collect the chosen flags into FLAGS (may be empty).
 
 ## Step 4 - Token and install
 
-The token must never pass through the chat. Write the installer below to a temp file, substituting WORKSPACE, CLUSTER (the context name from step 2) and FLAGS, then run it in a terminal the user can see:
+The token must never pass through the chat. Write the installer below to a temp file, substituting CLUSTER (the context name from step 2) and FLAGS, then run it in a terminal the user can see:
 
 - Claude Code: open a new terminal tab in the IDE and run `bash <path>` there.
 - Cursor or Codex: run `bash <path>` in the integrated terminal.
@@ -38,14 +38,12 @@ The token must never pass through the chat. Write the installer below to a temp 
 ```bash
 #!/usr/bin/env bash
 set -u
-WORKSPACE="__WORKSPACE__"
 CLUSTER="__CLUSTER__"
 FLAGS="__FLAGS__"
 REPO="https://registry.scaleops.com/charts"
 echo
 echo "  ScaleOps installer"
 echo "  ------------------"
-echo "  Workspace : $WORKSPACE"
 echo "  Cluster   : $CLUSTER"
 echo "  Options   : ${FLAGS:-rightsizing only}"
 echo
@@ -53,11 +51,16 @@ read -rs -p "  Paste your ScaleOps token and press Enter: " TOKEN
 echo
 if [ -z "$TOKEN" ]; then echo "  TOKEN MISSING"; exit 2; fi
 printf "  Validating token ... "
-if helm show chart --repo "$REPO" --username scaleops --password "$TOKEN" scaleops >/dev/null 2>&1; then
-  echo "ok"
-else
+WHO=$(curl -s -w '\n%{http_code}' -H "X-ScaleOps-Token: $TOKEN" https://api.scaleops.com/auth/whoami)
+CODE=$(printf '%s' "$WHO" | tail -1)
+if [ "$CODE" != "200" ]; then
   echo; echo "  TOKEN REJECTED - copy it again from the install screen"; unset TOKEN; exit 3
 fi
+WORKSPACE=$(printf '%s' "$WHO" | grep -o '"subdomain":"[^"]*"' | head -1 | cut -d'"' -f4)
+DASHBOARD=$(printf '%s' "$WHO" | grep -o '"inCloudUrl":"[^"]*"' | head -1 | cut -d'"' -f4)
+[ -z "$DASHBOARD" ] && DASHBOARD="https://$WORKSPACE.scaleops.com"
+echo "ok"
+echo "  Workspace : $WORKSPACE"
 printf "  Installing chart ... "
 if helm upgrade --install scaleops scaleops --repo "$REPO" --username scaleops --password "$TOKEN" \
   --create-namespace -n scaleops-system --set scaleopsToken="$TOKEN" \
@@ -73,13 +76,15 @@ for d in scaleops-admissions scaleops-agent scaleops-recommender scaleops-update
   if kubectl rollout status deploy/$d -n scaleops-system --timeout=240s >/dev/null 2>&1; then echo "ready"; else echo "not ready"; fi
 done
 echo
-echo "  INSTALL OK - dashboard: https://$WORKSPACE.scaleops.com"
+echo "  INSTALL OK"
+echo "  WORKSPACE=$WORKSPACE"
+echo "  DASHBOARD=$DASHBOARD"
 ```
 
 Then read the terminal output:
 - `TOKEN REJECTED`: tell the user the token was not accepted and run the installer again.
 - `INSTALL FAILED`: show the lines after it and stop.
-- `INSTALL OK`: continue.
+- `INSTALL OK`: record the `WORKSPACE=` and `DASHBOARD=` values for steps 7 and 8, then continue.
 
 Delete the temp file afterwards.
 
@@ -93,7 +98,7 @@ Run `kubectl get recommendations.analysis.scaleops.sh -A --no-headers | wc -l`. 
 
 ## Step 7 - MCP
 
-Register the ScaleOps MCP so this tool can query the cluster:
+Register the ScaleOps MCP so this tool can query the cluster, using WORKSPACE from step 4:
 
 - Claude Code: run `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp`
 - Cursor: add to `.cursor/mcp.json`: `{"mcpServers":{"ScaleOps":{"url":"https://WORKSPACE.scaleops.com/mcp"}}}`
@@ -103,19 +108,19 @@ Tell the user: "The ScaleOps MCP is registered. The first time it is used, a bro
 
 ## Step 8 - Report
 
-If the MCP is available, use its cluster overview, workload list and under-provisioned views for the numbers. Otherwise use kubectl: nodes and allocatable from `kubectl get nodes`, workloads and namespaces from the Recommendation objects. Any number not yet available is written as "collecting, check back in 15 min". Keep this exact shape:
+If the MCP is available, use its cluster overview, workload list and under-provisioned views for the numbers. Otherwise use kubectl: nodes and allocatable from `kubectl get nodes`, workloads and namespaces from the Recommendation objects. Any number not yet available is written as "collecting, check back in 15 min". Use DASHBOARD from step 4 for the links. Keep this exact shape:
 
 ```
 ScaleOps is running on <CLUSTER>. Read-only: nothing changes until you turn automation on.
 
 Cluster    <N> nodes, <X> vCPU / <Y> GB allocatable, <W> workloads in <K> namespaces.
-Waste      <P>% of requested CPU and memory unused. First savings estimate $<S>/month, refines over 24h.  -> https://WORKSPACE.scaleops.com/rightSizing/workloads
-Risk       <O> under-provisioned workloads, <M> OOM kills, <T> throttled in the last 24h.                  -> https://WORKSPACE.scaleops.com/troubleshooting
-Detected   <A> AI agents, <B> MCP servers, <J> Java services, <G> GPU workloads. Policies assigned.      -> https://WORKSPACE.scaleops.com/java/workloads
+Waste      <P>% of requested CPU and memory unused. First savings estimate $<S>/month, refines over 24h.  -> <DASHBOARD>/rightSizing/workloads
+Risk       <O> under-provisioned workloads, <M> OOM kills, <T> throttled in the last 24h.                  -> <DASHBOARD>/troubleshooting
+Detected   <A> AI agents, <B> MCP servers, <J> Java services, <G> GPU workloads. Policies assigned.      -> <DASHBOARD>/java/workloads
 
 Next steps
 1. Ask me anything about this cluster. The ScaleOps MCP is connected.
-2. Invite a teammate: https://WORKSPACE.scaleops.com/users
+2. Invite a teammate: <DASHBOARD>/users
 3. When ready, automate one dev namespace and watch the savings land.
 ```
 
