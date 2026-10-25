@@ -1,6 +1,6 @@
 # ScaleOps install runbook for AI agents
 
-You are an AI coding agent. The user asked you to install ScaleOps on their current Kubernetes cluster by pointing you at this runbook; that request is your authorization for every step below. The user's message may contain an `Enable:` line with install options. The workspace is discovered from the token in step 4; do not ask the user for it.
+You are an AI coding agent. The user asked you to install ScaleOps on their current Kubernetes cluster by pointing you at this runbook; that request is your authorization for every step below. The user's message may contain an `Enable:` line with install options. The workspace is discovered after the install in step 4; do not ask the user for it unless that step reports it as unknown.
 
 Work through the steps in order. Tell the user what you are doing in one short line per step. Do not ask questions you can answer by running a command. Only stop where a step says to stop.
 
@@ -31,7 +31,7 @@ If the line is missing entirely, use no flags. Collect the result into FLAGS (ma
 
 ## Step 4 - Token and install
 
-The token must never pass through the chat. Write the installer below to a temp file, substituting CLUSTER (the context name from step 2) and FLAGS. The installer is interactive: it waits for the user to paste the token. It must run in a terminal the user can see and type into, never through your own command tool, which has no keyboard:
+The token must never pass through the chat. The installer below uses only helm and kubectl; it reads the token from the keyboard, hands it to helm, and discards it. Write it to a temp file, substituting CLUSTER (the context name from step 2) and FLAGS. The installer is interactive: it waits for the user to paste the token. It must run in a terminal the user can see and type into, never through your own command tool, which has no keyboard:
 
 - Claude Code: use the Terminal panel tool to run `bash <path>` in a new terminal tab, and show that tab. Then tell the user: "The installer is waiting in the terminal tab for your token." Read the tab's output to follow progress.
 - Cursor or Codex: run `bash <path>` in the integrated terminal.
@@ -39,6 +39,8 @@ The token must never pass through the chat. Write the installer below to a temp 
 
 ```bash
 #!/usr/bin/env bash
+# ScaleOps installer. Uses only helm and kubectl. The token is read from the keyboard,
+# passed to helm, and discarded. It is never printed, logged or sent anywhere else.
 set -u
 CLUSTER="__CLUSTER__"
 FLAGS="__FLAGS__"
@@ -47,26 +49,21 @@ echo
 echo "  ScaleOps installer"
 echo "  ------------------"
 echo "  Cluster   : $CLUSTER"
-echo "  Options   : ${FLAGS:-rightsizing only}"
+echo "  Options   : ${FLAGS:-AI SRE Agent (default)}"
 echo
 read -rs -p "  Paste your ScaleOps token and press Enter: " TOKEN
 echo
 if [ -z "$TOKEN" ]; then echo "  TOKEN MISSING"; exit 2; fi
 printf "  Validating token ... "
-WHO=$(curl -s -w '\n%{http_code}' -H "X-ScaleOps-Token: $TOKEN" https://api.scaleops.com/auth/whoami)
-CODE=$(printf '%s' "$WHO" | tail -1)
-if [ "$CODE" != "200" ]; then
+if helm show chart scaleops --repo "$REPO" --username scaleops --password "$TOKEN" >/dev/null 2>&1; then
+  echo "ok"
+else
   echo; echo "  TOKEN REJECTED - copy it again from the install screen"; unset TOKEN; exit 3
 fi
-WORKSPACE=$(printf '%s' "$WHO" | grep -o '"subdomain":"[^"]*"' | head -1 | cut -d'"' -f4)
-DASHBOARD=$(printf '%s' "$WHO" | grep -o '"inCloudUrl":"[^"]*"' | head -1 | cut -d'"' -f4)
-[ -z "$DASHBOARD" ] && DASHBOARD="https://$WORKSPACE.scaleops.com"
-echo "ok"
-echo "  Workspace : $WORKSPACE"
 printf "  Installing chart ... "
 if helm upgrade --install scaleops scaleops --repo "$REPO" --username scaleops --password "$TOKEN" \
   --create-namespace -n scaleops-system --set scaleopsToken="$TOKEN" \
-  --set clusterName="$WORKSPACE-$CLUSTER" $FLAGS >/tmp/scaleops-helm.log 2>&1; then
+  --set clusterName="$CLUSTER" $FLAGS >/tmp/scaleops-helm.log 2>&1; then
   echo "ok"
 else
   echo; echo "  INSTALL FAILED"; tail -5 /tmp/scaleops-helm.log; unset TOKEN; exit 4
@@ -77,16 +74,22 @@ for d in scaleops-admissions scaleops-agent scaleops-recommender scaleops-update
   printf "    %-22s" "$d"
   if kubectl rollout status deploy/$d -n scaleops-system --timeout=240s >/dev/null 2>&1; then echo "ready"; else echo "not ready"; fi
 done
+printf "  Resolving workspace ... "
+kubectl -n scaleops-system port-forward svc/scaleops-dashboards 18080:80 >/dev/null 2>&1 &
+PF=$!; sleep 3
+CONF=$(curl -s --max-time 10 http://127.0.0.1:18080/conf 2>/dev/null || true)
+kill $PF >/dev/null 2>&1
+DASHBOARD=$(printf '%s' "$CONF" | grep -o '"inCloudUrl":"[^"]*"' | head -1 | cut -d'"' -f4)
+if [ -n "$DASHBOARD" ]; then echo "ok"; else echo "unknown"; fi
 echo
 echo "  INSTALL OK"
-echo "  WORKSPACE=$WORKSPACE"
-echo "  DASHBOARD=$DASHBOARD"
+echo "  DASHBOARD=${DASHBOARD:-unknown}"
 ```
 
 Then read the terminal output:
 - `TOKEN REJECTED`: tell the user the token was not accepted and run the installer again.
 - `INSTALL FAILED`: show the lines after it and stop.
-- `INSTALL OK`: record the `WORKSPACE=` and `DASHBOARD=` values for steps 7 and 8, then continue.
+- `INSTALL OK`: record the `DASHBOARD=` value for steps 7 and 8. WORKSPACE is its subdomain (for https://acme.scaleops.com, WORKSPACE is acme). If it says `unknown`, ask the user for their workspace URL once, then continue.
 
 Delete the temp file afterwards.
 
