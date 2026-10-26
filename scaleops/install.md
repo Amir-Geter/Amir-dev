@@ -129,7 +129,7 @@ Write the report as plain markdown, not inside a code block. Keep this shape exa
 
 Fallback when the MCP has no data: replace the whole Waste, Risk or Detected line with `💰 **Waste** · collecting, check back in 15 min` (same for the other two, with their own emoji and label). Never put the word "collecting" inside a number slot. Write `1 node`, not `1 nodes`.
 
-Sign-in note, only when the MCP did not respond, one line after the report: `The ScaleOps MCP needs a one-time sign-in: open Connectors in the sidebar and click Authenticate next to Scaleops. Then ask me for the numbers.`
+Sign-in note, only when the MCP did not respond, one line after the report: `One click left: type /mcp here, pick scaleops and sign in (or Connectors in the sidebar, Authenticate next to Scaleops). Then ask me for the numbers.` The sign-in cannot be started by the agent; an MCP server added to `~/.claude.json` during a session is loaded by the next session, so in the desktop app the user may need to start a new session first. Say so only if `/mcp` does not list scaleops.
 
 Nothing else after the report: no summary of what happened, no list of pods, no cleanup notes.
 
