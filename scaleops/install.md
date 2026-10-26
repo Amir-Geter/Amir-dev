@@ -96,6 +96,7 @@ Do these now, in parallel with the user pasting the token. Do not poll the termi
 
 Register the ScaleOps MCP using WORKSPACE from the user's message:
 
+- Claude Code desktop with the connector registry tools: search the MCP registry for `scaleops`. If a result's url contains `WORKSPACE.scaleops.com` (or is `https://mcp.scaleops.com`), remember its directory id and skip the bullet below; in step 3 you will show its Connect card. Otherwise use the next bullet.
 - Claude Code: run `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp`. If the `claude` command is not on PATH (desktop app), add this entry under `mcpServers` in `~/.claude.json`, creating the key if needed and keeping everything else in the file untouched: `"scaleops": {"type": "http", "url": "https://WORKSPACE.scaleops.com/mcp"}`. If an entry with that URL already exists, leave it.
 - Cursor: add to `.cursor/mcp.json`: `{"mcpServers":{"ScaleOps":{"url":"https://WORKSPACE.scaleops.com/mcp"}}}`
 - Codex: include the URL `https://WORKSPACE.scaleops.com/mcp` in the final notes for the user to add to their Codex config.
@@ -129,7 +130,9 @@ Write the report as plain markdown, not inside a code block. Keep this shape exa
 
 Fallback when the MCP has no data: replace the whole Waste, Risk or Detected line with `💰 **Waste** · collecting, check back in 15 min` (same for the other two, with their own emoji and label). Never put the word "collecting" inside a number slot. Write `1 node`, not `1 nodes`.
 
-Sign-in note, only when the MCP did not respond, one line after the report: `One click left: type /mcp here, pick scaleops and sign in (or Connectors in the sidebar, Authenticate next to Scaleops). Then ask me for the numbers.` The sign-in cannot be started by the agent; an MCP server added to `~/.claude.json` during a session is loaded by the next session, so in the desktop app the user may need to start a new session first. Say so only if `/mcp` does not list scaleops.
+If step 2 found a ScaleOps connector in the registry and it is not connected, end with the suggest-connectors tool for that directory id (keyword `cluster`) so the app shows its Connect card, preceded by one line: `**Last step:** connect ScaleOps below so I can answer questions about this cluster.` Skip the sign-in note in that case.
+
+Sign-in note, only when the MCP did not respond and no connector card was shown, one line after the report: `One click left: type /mcp here, pick scaleops and sign in (or Connectors in the sidebar, Authenticate next to Scaleops). Then ask me for the numbers.` The sign-in cannot be started by the agent; an MCP server added to `~/.claude.json` during a session is loaded by the next session, so in the desktop app the user may need to start a new session first. Say so only if `/mcp` does not list scaleops.
 
 Nothing else after the report: no summary of what happened, no list of pods, no cleanup notes.
 
