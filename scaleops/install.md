@@ -21,7 +21,7 @@ Do nothing that is not in a step. Do not re-read this page, re-check what the in
 
 | You are | Launch (step 1) | Connect the MCP (step 2) | Read the result (step 3) |
 |---|---|---|---|
-| Claude Code desktop app | If you have not yet, open an empty terminal tab with the open-terminal tool so the panel is visible. Then Terminal panel tool: run the **helm** command in a new tab titled "ScaleOps installer", then show-pane tool with pane `terminal` and that tab id, then close the empty tab with the stop-terminal tool (`close: true`). If show-pane says the session is not open in a window, call it again before every terminal read until it succeeds | Registry first, then `~/.claude.json` (see step 2) | Read-terminal tool on that tab, 60 s waits |
+| Claude Code desktop app | Terminal panel tool: run the **helm** command in a new tab titled "ScaleOps installer", then show-pane tool with pane `terminal` and that tab id. Never open an empty terminal tab: the user would paste the token into a plain shell. If show-pane says the session is not open in a window, call it again before every terminal read until it succeeds | Registry first, then `~/.claude.json` (see step 2) | Read-terminal tool on that tab, 60 s waits |
 | Claude Code in a terminal | Run the **dialog** command with your terminal tool as a background command. It opens a ScaleOps pop-up window for the token; the user never touches the terminal | `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp` | Read `/tmp/scaleops-install.status` every 30 s |
 | Cursor | Run the **dialog** command with your terminal tool as a background command. It opens a ScaleOps pop-up window for the token; the user never touches the terminal | Add `"scaleops": {"url": "https://WORKSPACE.scaleops.com/mcp"}` under `mcpServers` in `~/.cursor/mcp.json`, creating the file or key if needed and keeping other entries | Read `/tmp/scaleops-install.status` every 30 s |
 | Codex | Run the **dialog** command with your terminal tool as a background command. It opens a ScaleOps pop-up window for the token; the user never touches the terminal | Tell the user to add `https://WORKSPACE.scaleops.com/mcp` to their Codex MCP config | Read `/tmp/scaleops-install.status` every 30 s |
@@ -51,7 +51,7 @@ Map `Enable:` to FLAGS (may be empty), using the line as given:
 
 Then run one of these commands as your row says, with FLAGS in place of `FLAGS` (keep the quotes, leave them empty if there are no flags). Do not write or retype the installer yourself.
 
-- **helm** command (one line; put FLAGS right before ` -n scaleops-system`, or nothing if FLAGS is empty): `printf "Paste your ScaleOps token (hidden) and press Enter: " && read -rs T && echo && echo "INSTALLING on $(kubectl config current-context)" && helm upgrade --install scaleops scaleops --repo https://registry.scaleops.com/charts --username scaleops --password "$T" --set scaleopsToken="$T" --set clusterName="$(kubectl config current-context)" -n scaleops-system --create-namespace --wait --timeout 5m && echo "INSTALL OK" || echo "INSTALL FAILED"; unset T`
+- **helm** command (one line; put FLAGS right before ` -n scaleops-system`, or nothing if FLAGS is empty): `printf "ScaleOps token (hidden): ";read -rs T;echo;helm upgrade -i scaleops scaleops --repo https://registry.scaleops.com/charts --username scaleops --password "$T" --set scaleopsToken="$T",clusterName="$(kubectl config current-context)" -n scaleops-system --create-namespace --wait&&echo INSTALL OK||echo INSTALL FAILED;unset T`
 
 - **terminal** command: `curl -fsSL https://raw.githubusercontent.com/Amir-Geter/Amir-dev/9871c21/scaleops/installer.sh -o /tmp/scaleops-install.sh && bash /tmp/scaleops-install.sh terminal "FLAGS"`
 - **dialog** command: `curl -fsSL https://raw.githubusercontent.com/Amir-Geter/Amir-dev/9871c21/scaleops/installer.sh -o /tmp/scaleops-install.sh && bash /tmp/scaleops-install.sh dialog "FLAGS"`
@@ -72,7 +72,7 @@ Use your row's "Read" cell. Act on the first of these lines that appears:
 
 | Installer prints | Do |
 |---|---|
-| `INSTALLING` | Send M2, keep waiting |
+| `INSTALLING`, or the token line is answered and helm is running | Send M2, keep waiting |
 | `INSTALL OK` | Note `CLUSTER=` and `NODES=`; if they were not printed, get them with `kubectl config current-context` and `kubectl get nodes --no-headers \| wc -l`. Delete `/tmp/scaleops-install.sh` if it exists. Claude Code desktop app: hide the terminal panel with the close-pane tool (pane `terminal`), leave the tab open. Send M3 |
 | `WAITING FOR TOKEN` | Keep waiting; the user is pasting the token |
 | `TOKEN MISSING` or `TOKEN REJECTED` | Launch the installer again (step 1) and send M1 again |
