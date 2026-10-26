@@ -33,7 +33,7 @@ If the line is missing entirely, use no flags. Collect the result into FLAGS (ma
 
 The token must never pass through the chat. The installer below uses only helm and kubectl: it reads the token from the keyboard, passes it to helm (the ScaleOps chart registry requires it for authentication), and discards it. It makes no other network call. Write it to a temp file, substituting CLUSTER (the context name from step 2) and FLAGS. The installer is interactive: it waits for the user to paste the token. It must run in a terminal the user can see and type into, never through your own command tool, which has no keyboard:
 
-- Claude Code: use the Terminal panel tool to run `bash <path>` in a new terminal tab titled "ScaleOps installer". Running a command there does not open the panel for the user, so immediately after, call the show-pane tool with pane `terminal` and that tab's id to bring the panel forward. Then tell the user: "The installer is waiting in the ScaleOps installer tab for your token." Read the tab's output to follow progress.
+- Claude Code: use the Terminal panel tool to run `bash <path>` in a new terminal tab titled "ScaleOps installer". Running a command there does not open the panel for the user, so immediately after, call the show-pane tool with pane `terminal` and that tab's id to bring the panel forward. Then tell the user: "The installer is waiting in the ScaleOps installer tab. Click inside the tab, paste your token (it shows as asterisks) and press Enter." Read the tab's output to follow progress.
 - Cursor or Codex: run `bash <path>` in the integrated terminal.
 - If you have no way to run a command in a visible terminal, print `bash <path>` and ask the user to run it in their terminal and tell you when it has finished.
 
@@ -51,7 +51,12 @@ echo "  ------------------"
 echo "  Cluster   : $CLUSTER"
 echo "  Options   : ${FLAGS:-AI SRE Agent (default)}"
 echo
-read -rs -p "  Paste your ScaleOps token and press Enter: " TOKEN
+printf "  Paste your ScaleOps token and press Enter (shown as *): "
+TOKEN=""
+while IFS= read -rs -n1 ch; do
+  [ -z "$ch" ] && break
+  if [ "$ch" = $'\x7f' ]; then TOKEN="${TOKEN%?}"; printf '\b \b'; else TOKEN="$TOKEN$ch"; printf '*'; fi
+done
 echo
 if [ -z "$TOKEN" ]; then echo "  TOKEN MISSING"; exit 2; fi
 printf "  Validating token ... "
