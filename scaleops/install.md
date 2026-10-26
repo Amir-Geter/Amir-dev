@@ -19,14 +19,14 @@ Do nothing that is not in a step. Do not re-read this page, re-check what the in
 | You are | Launch the installer (step 2) | Connect the MCP (step 3) | Read the result (step 4) |
 |---|---|---|---|
 | Claude Code desktop app | Terminal panel tool: run `bash <path>` in a new tab titled "ScaleOps installer", then show-pane tool with pane `terminal` and that tab id | Registry first, then `~/.claude.json` (see step 3) | Read-terminal tool on that tab, 60 s waits |
-| Claude Code in a terminal | You cannot type into it. Tell the user to run `bash <path>` in a second terminal window | `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp` | Read `/tmp/scaleops-install.status` every 30 s |
-| Cursor | Your terminal is read-only, so do not run it yourself. Tell the user: open the terminal panel (View, Terminal), run `bash <path>`, paste the token there | Add `"scaleops": {"url": "https://WORKSPACE.scaleops.com/mcp"}` under `mcpServers` in `~/.cursor/mcp.json`, creating the file or key if needed and keeping other entries | Read `/tmp/scaleops-install.status` every 30 s |
-| Codex | Run `bash <path>` in the integrated terminal | Tell the user to add `https://WORKSPACE.scaleops.com/mcp` to their Codex MCP config | Read the command output when it returns |
-| Anything else | Tell the user to run `bash <path>` in their terminal | Give the user the MCP URL `https://WORKSPACE.scaleops.com/mcp` | Read `/tmp/scaleops-install.status` every 30 s if you can read files; otherwise ask the user to paste the last 3 lines |
+| Claude Code in a terminal | Run `bash <path> dialog` with your terminal tool as a background command. It opens a ScaleOps pop-up window for the token; the user never touches the terminal | `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp` | Read `/tmp/scaleops-install.status` every 30 s |
+| Cursor | Run `bash <path> dialog` with your terminal tool as a background command. It opens a ScaleOps pop-up window for the token; the user never touches the terminal | Add `"scaleops": {"url": "https://WORKSPACE.scaleops.com/mcp"}` under `mcpServers` in `~/.cursor/mcp.json`, creating the file or key if needed and keeping other entries | Read `/tmp/scaleops-install.status` every 30 s |
+| Codex | Run `bash <path> dialog` with your terminal tool as a background command. It opens a ScaleOps pop-up window for the token; the user never touches the terminal | Tell the user to add `https://WORKSPACE.scaleops.com/mcp` to their Codex MCP config | Read `/tmp/scaleops-install.status` every 30 s |
+| Anything else | Run `bash <path> dialog` with your terminal tool as a background command. It opens a ScaleOps pop-up window for the token; the user never touches the terminal. If you cannot run commands, tell the user to run `bash <path>` in a terminal | Give the user the MCP URL `https://WORKSPACE.scaleops.com/mcp` | Read `/tmp/scaleops-install.status` every 30 s, or ask the user to paste the last 3 lines |
 
 **Messages.** Send only these, filled in, and nothing else between them:
 
-- M1 (after step 2): `**1/4 Installer ready.** Paste your ScaleOps token in the installer terminal (it shows as asterisks) and press Enter.` If the user has to run it themselves, use instead: `**1/4 Installer ready.** Open your terminal, run the command below, paste your ScaleOps token (it shows as asterisks) and press Enter. I will follow the progress from here.` followed by the command in a code block.
+- M1 (after step 2): terminal tab: `**1/4 Installer ready.** Paste your ScaleOps token in the installer terminal (it shows as asterisks) and press Enter.` Pop-up (`dialog`): `**1/4 Installer ready.** Paste your ScaleOps token in the ScaleOps window and click Install. If you don't see it, it may be behind this window.`
 - M2 (when the installer prints `INSTALLING`, if you can see it live): `**2/4 Installing on <CLUSTER>.** About 2 minutes. You can leave this; I will report when it is done.`
 - M3 (after step 4): `**3/4 Pods running.** Building your report.`
 - M4: the report from step 5.
@@ -53,6 +53,7 @@ Save this script to a temp file, replacing `__FLAGS__` with FLAGS. It uses only 
 # ScaleOps installer. Uses only helm and kubectl. The token is read from the keyboard,
 # passed to helm, and discarded. It is never printed, logged or sent anywhere else.
 set -u
+MODE="${1:-terminal}"   # "terminal": read the token here. "dialog": ask in a pop-up window
 FLAGS="__FLAGS__"
 REPO="https://registry.scaleops.com/charts"
 STATUS=/tmp/scaleops-install.status   # progress markers only, never the token
@@ -69,17 +70,32 @@ NODES=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
 echo "  Cluster   : $CLUSTER ($NODES nodes)"
 echo "  Options   : ${FLAGS:-AI SRE Agent (default)}"
 echo
-while IFS= read -rs -t 1 -n1 junk; do :; done   # drain anything the terminal sent on startup
-printf "  Paste your ScaleOps token and press Enter (shown as *): "
 TOKEN=""
-while IFS= read -rs -n1 ch; do
-  [ -z "$ch" ] && break
-  if [ "$ch" = $'\e' ]; then   # skip terminal escape sequences such as bracketed-paste markers
-    while IFS= read -rs -t 1 -n1 e; do case "$e" in [~A-Za-z]) break;; esac; done; continue
+if [ "$MODE" = "dialog" ]; then
+  say "WAITING FOR TOKEN in the ScaleOps pop-up window"
+  SAFE=$(printf '%s' "$CLUSTER" | LC_ALL=C tr -cd 'A-Za-z0-9._:/@-')
+  if command -v osascript >/dev/null 2>&1; then
+    TOKEN=$(osascript -e "display dialog \"Paste your ScaleOps token to install on $SAFE\" with title \"ScaleOps installer\" default answer \"\" with hidden answer buttons {\"Cancel\", \"Install\"} default button \"Install\" giving up after 600" -e 'text returned of result' 2>/dev/null)
+  elif command -v zenity >/dev/null 2>&1; then
+    TOKEN=$(zenity --password --title="ScaleOps installer - paste your token" 2>/dev/null)
+  elif command -v kdialog >/dev/null 2>&1; then
+    TOKEN=$(kdialog --title "ScaleOps installer" --password "Paste your ScaleOps token" 2>/dev/null)
+  else
+    say "NO DIALOG - run this installer in a terminal instead"; exit 5
   fi
-  if [ "$ch" = $'\x7f' ]; then TOKEN="${TOKEN%?}"; printf '\b \b'; else TOKEN="$TOKEN$ch"; printf '*'; fi
-done
-echo
+else
+  while IFS= read -rs -t 1 -n1 junk; do :; done   # drain anything the terminal sent on startup
+  printf "  Paste your ScaleOps token and press Enter (shown as *): "
+  TOKEN=""
+  while IFS= read -rs -n1 ch; do
+    [ -z "$ch" ] && break
+    if [ "$ch" = $'\e' ]; then   # skip terminal escape sequences such as bracketed-paste markers
+      while IFS= read -rs -t 1 -n1 e; do case "$e" in [~A-Za-z]) break;; esac; done; continue
+    fi
+    if [ "$ch" = $'\x7f' ]; then TOKEN="${TOKEN%?}"; printf '\b \b'; else TOKEN="$TOKEN$ch"; printf '*'; fi
+  done
+  echo
+fi
 TOKEN=$(printf '%s' "$TOKEN" | LC_ALL=C tr -cd 'A-Za-z0-9_.:-')   # keep printable token characters only
 if [ -z "$TOKEN" ]; then say "TOKEN MISSING"; exit 2; fi
 printf "  Validating token ... "
@@ -129,7 +145,9 @@ Use your row's "Read" cell. Act on the first of these lines that appears:
 |---|---|
 | `INSTALLING` | Send M2, keep waiting |
 | `INSTALL OK` | Note `CLUSTER=` and `NODES=`. Delete the temp file. Claude Code desktop app: hide the terminal panel with the close-pane tool (pane `terminal`), leave the tab open. Send M3 |
+| `WAITING FOR TOKEN` | Keep waiting; the user is pasting the token |
 | `TOKEN MISSING` or `TOKEN REJECTED` | Launch the installer again (step 2) and send M1 again |
+| `NO DIALOG` | Tell the user to run `bash <path>` in a terminal and paste the token there; keep reading the status file |
 | `MISSING`, `NO CLUSTER` or `INSTALL FAILED` | Report that line and stop |
 
 Do not poll pods; the installer already waits for them.
