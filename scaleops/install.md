@@ -13,7 +13,9 @@ Right after step 1, create a to-do list with the four steps below and tick each 
 
 Do nothing that is not in a step. Do not re-read this page, re-check what the installer checks, or explore the machine. After step 4, the task is finished: stop.
 
-**Inputs** from the user's message: `Workspace:` is the dashboard URL (for example https://acme.scaleops.com; WORKSPACE is its subdomain, acme). `Enable:` lists the options the user ticked. Do not ask for either.
+**Inputs** from the user's message: `Workspace:` is the dashboard URL (for example https://acme.scaleops.com; WORKSPACE is its subdomain, acme). The message may also contain the launch command itself, with the user's options already in it, or an `Enable:` line listing the options. Do not ask for any of these.
+
+**If the user's message contains the launch command and you have not run it yet, run it now, exactly as given, as your row says, before anything else.** Then continue below.
 
 **Your tool.** Find your row once and use only that row everywhere below.
 
@@ -36,7 +38,7 @@ On any failure send one line, what failed and what the user can do, and stop.
 
 ## Step 1 - Launch the installer
 
-Done when: the installer is running where the user can type, and you sent M1. Target: within 15 seconds of reading this page.
+Done when: the installer is running where the user can type, and you sent M1. Target: within 15 seconds. If you already ran the command from the user's message, this step is done once you send M1; skip the rest of it.
 
 Map `Enable:` to FLAGS (may be empty), using the line as given:
 
