@@ -33,7 +33,7 @@ If the line is missing entirely, use no flags. Collect the result into FLAGS (ma
 
 The token must never pass through the chat. The installer below uses only helm and kubectl; it reads the token from the keyboard, hands it to helm, and discards it. Write it to a temp file, substituting CLUSTER (the context name from step 2) and FLAGS. The installer is interactive: it waits for the user to paste the token. It must run in a terminal the user can see and type into, never through your own command tool, which has no keyboard:
 
-- Claude Code: use the Terminal panel tool to run `bash <path>` in a new terminal tab, and show that tab. Then tell the user: "The installer is waiting in the terminal tab for your token." Read the tab's output to follow progress.
+- Claude Code: use the Terminal panel tool to run `bash <path>` in a new terminal tab titled "ScaleOps installer". Running a command there does not open the panel for the user, so immediately after, call the show-pane tool with pane `terminal` and that tab's id to bring the panel forward. Then tell the user: "The installer is waiting in the ScaleOps installer tab for your token." Read the tab's output to follow progress.
 - Cursor or Codex: run `bash <path>` in the integrated terminal.
 - If you have no way to run a command in a visible terminal, print `bash <path>` and ask the user to run it in their terminal and tell you when it has finished.
 
