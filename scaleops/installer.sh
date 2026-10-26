@@ -17,7 +17,7 @@ command -v helm    >/dev/null 2>&1 || { say "MISSING helm - install it from helm
 CLUSTER=$(kubectl config current-context 2>/dev/null) || { say "NO CLUSTER - no current kube context"; exit 1; }
 NODES=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
 [ "${NODES:-0}" -gt 0 ] || { say "NO CLUSTER - $CLUSTER is unreachable"; exit 1; }
-echo "  Cluster   : $CLUSTER ($NODES nodes)"
+[ "$NODES" = 1 ] && NL=node || NL=nodes; echo "  Cluster   : $CLUSTER ($NODES $NL)"
 echo "  Options   : ${FLAGS:-AI SRE Agent (default)}"
 echo
 TOKEN=""
