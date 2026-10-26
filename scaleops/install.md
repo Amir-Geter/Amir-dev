@@ -1,6 +1,6 @@
 # ScaleOps install runbook for AI agents
 
-You are an AI coding agent. The user asked you to install ScaleOps on their current Kubernetes cluster by pointing you at this runbook; that request is your authorization for every step below. The user's message may contain an `Enable:` line with install options. The workspace is discovered after the install in step 4; do not ask the user for it unless that step reports it as unknown.
+This page is the technical reference for installing ScaleOps with an AI coding agent. The user's message carries two values copied from their ScaleOps install page: `Workspace:` (the dashboard URL, for example https://acme.scaleops.com; WORKSPACE is its subdomain, acme) and `Enable:` (the install options they ticked). Do not ask for either.
 
 Work through the steps in order. Tell the user what you are doing in one short line per step. Do not ask questions you can answer by running a command. Only stop where a step says to stop.
 
@@ -31,7 +31,7 @@ If the line is missing entirely, use no flags. Collect the result into FLAGS (ma
 
 ## Step 4 - Token and install
 
-The token must never pass through the chat. The installer below uses only helm and kubectl; it reads the token from the keyboard, hands it to helm, and discards it. Write it to a temp file, substituting CLUSTER (the context name from step 2) and FLAGS. The installer is interactive: it waits for the user to paste the token. It must run in a terminal the user can see and type into, never through your own command tool, which has no keyboard:
+The token must never pass through the chat. The installer below uses only helm and kubectl: it reads the token from the keyboard, passes it to helm (the ScaleOps chart registry requires it for authentication), and discards it. It makes no other network call. Write it to a temp file, substituting CLUSTER (the context name from step 2) and FLAGS. The installer is interactive: it waits for the user to paste the token. It must run in a terminal the user can see and type into, never through your own command tool, which has no keyboard:
 
 - Claude Code: use the Terminal panel tool to run `bash <path>` in a new terminal tab titled "ScaleOps installer". Running a command there does not open the panel for the user, so immediately after, call the show-pane tool with pane `terminal` and that tab's id to bring the panel forward. Then tell the user: "The installer is waiting in the ScaleOps installer tab for your token." Read the tab's output to follow progress.
 - Cursor or Codex: run `bash <path>` in the integrated terminal.
@@ -74,22 +74,14 @@ for d in scaleops-admissions scaleops-agent scaleops-recommender scaleops-update
   printf "    %-22s" "$d"
   if kubectl rollout status deploy/$d -n scaleops-system --timeout=240s >/dev/null 2>&1; then echo "ready"; else echo "not ready"; fi
 done
-printf "  Resolving workspace ... "
-kubectl -n scaleops-system port-forward svc/scaleops-dashboards 18080:80 >/dev/null 2>&1 &
-PF=$!; sleep 3
-CONF=$(curl -s --max-time 10 http://127.0.0.1:18080/conf 2>/dev/null || true)
-kill $PF >/dev/null 2>&1
-DASHBOARD=$(printf '%s' "$CONF" | grep -o '"inCloudUrl":"[^"]*"' | head -1 | cut -d'"' -f4)
-if [ -n "$DASHBOARD" ]; then echo "ok"; else echo "unknown"; fi
 echo
 echo "  INSTALL OK"
-echo "  DASHBOARD=${DASHBOARD:-unknown}"
 ```
 
 Then read the terminal output:
 - `TOKEN REJECTED`: tell the user the token was not accepted and run the installer again.
 - `INSTALL FAILED`: show the lines after it and stop.
-- `INSTALL OK`: record the `DASHBOARD=` value for steps 7 and 8. WORKSPACE is its subdomain (for https://acme.scaleops.com, WORKSPACE is acme). If it says `unknown`, ask the user for their workspace URL once, then continue.
+- `INSTALL OK`: continue.
 
 Delete the temp file afterwards.
 
@@ -103,7 +95,7 @@ Run `kubectl get recommendations.analysis.scaleops.sh -A --no-headers | wc -l`. 
 
 ## Step 7 - MCP
 
-Register the ScaleOps MCP so this tool can query the cluster, using WORKSPACE from step 4:
+Register the ScaleOps MCP so this tool can query the cluster, using WORKSPACE from the user's message:
 
 - Claude Code: run `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp`. If the `claude` command is not on PATH (desktop app), instead add this entry under `mcpServers` in `~/.claude.json`, creating the key if needed and keeping everything else in the file untouched: `"scaleops": {"type": "http", "url": "https://WORKSPACE.scaleops.com/mcp"}`
 - Cursor: add to `.cursor/mcp.json`: `{"mcpServers":{"ScaleOps":{"url":"https://WORKSPACE.scaleops.com/mcp"}}}`
@@ -113,7 +105,7 @@ Tell the user: "The ScaleOps MCP is registered. The first time it is used, a bro
 
 ## Step 8 - Report
 
-If the MCP is available, use its cluster overview, workload list and under-provisioned views for the numbers. Otherwise use kubectl: nodes and allocatable from `kubectl get nodes`, workloads and namespaces from the Recommendation objects. Any number not yet available is written as "collecting, check back in 15 min". Use DASHBOARD from step 4 for the links. Keep this exact shape:
+If the MCP is available, use its cluster overview, workload list and under-provisioned views for the numbers. Otherwise use kubectl: nodes and allocatable from `kubectl get nodes`, workloads and namespaces from the Recommendation objects. Any number not yet available is written as "collecting, check back in 15 min". Use the `Workspace:` URL from the user's message for the links. Keep this exact shape:
 
 ```
 ScaleOps is running on <CLUSTER>. Read-only: nothing changes until you turn automation on.
