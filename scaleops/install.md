@@ -71,11 +71,12 @@ Use your row's "Read" cell. Act on the first of these lines that appears:
 | Installer prints | Do |
 |---|---|
 | `INSTALLING` | Send M2, keep waiting |
-| `INSTALL OK` | Note `CLUSTER=` and `NODES=`. Delete `/tmp/scaleops-install.sh`. Claude Code desktop app: hide the terminal panel with the close-pane tool (pane `terminal`), leave the tab open. Send M3 |
+| `INSTALL OK` | Note `CLUSTER=` and `NODES=`; if they were not printed, get them with `kubectl config current-context` and `kubectl get nodes --no-headers \| wc -l`. Delete `/tmp/scaleops-install.sh` if it exists. Claude Code desktop app: hide the terminal panel with the close-pane tool (pane `terminal`), leave the tab open. Send M3 |
 | `WAITING FOR TOKEN` | Keep waiting; the user is pasting the token |
 | `TOKEN MISSING` or `TOKEN REJECTED` | Launch the installer again (step 1) and send M1 again |
 | `NO DIALOG` | Give the user the **terminal** command to run in a terminal; keep reading the status file |
-| `MISSING`, `NO CLUSTER` or `INSTALL FAILED` | Report that line and stop |
+| `INSTALL FAILED` with `401` or `unauthorized` above it | The token was wrong. Launch the same command again and send M1 again |
+| `MISSING`, `NO CLUSTER` or `INSTALL FAILED` | Report that line and the error above it, and stop |
 
 Do not poll pods; the installer already waits for them.
 
