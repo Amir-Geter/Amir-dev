@@ -21,7 +21,7 @@ Do nothing that is not in a step. Do not re-read this page, re-check what the in
 
 | You are | Launch (step 1) | Connect the MCP (step 2) | Read the result (step 3) |
 |---|---|---|---|
-| Claude Code desktop app | Terminal panel tool: run the **terminal** command in a new tab titled "ScaleOps installer", then show-pane tool with pane `terminal` and that tab id. If show-pane says the session is not open in a window, call it again before every terminal read until it succeeds | Registry first, then `~/.claude.json` (see step 2) | Read-terminal tool on that tab, 60 s waits |
+| Claude Code desktop app | Terminal panel tool: run the **helm** command in a new tab titled "ScaleOps installer", then show-pane tool with pane `terminal` and that tab id. If show-pane says the session is not open in a window, call it again before every terminal read until it succeeds | Registry first, then `~/.claude.json` (see step 2) | Read-terminal tool on that tab, 60 s waits |
 | Claude Code in a terminal | Run the **dialog** command with your terminal tool as a background command. It opens a ScaleOps pop-up window for the token; the user never touches the terminal | `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp` | Read `/tmp/scaleops-install.status` every 30 s |
 | Cursor | Run the **dialog** command with your terminal tool as a background command. It opens a ScaleOps pop-up window for the token; the user never touches the terminal | Add `"scaleops": {"url": "https://WORKSPACE.scaleops.com/mcp"}` under `mcpServers` in `~/.cursor/mcp.json`, creating the file or key if needed and keeping other entries | Read `/tmp/scaleops-install.status` every 30 s |
 | Codex | Run the **dialog** command with your terminal tool as a background command. It opens a ScaleOps pop-up window for the token; the user never touches the terminal | Tell the user to add `https://WORKSPACE.scaleops.com/mcp` to their Codex MCP config | Read `/tmp/scaleops-install.status` every 30 s |
@@ -29,7 +29,7 @@ Do nothing that is not in a step. Do not re-read this page, re-check what the in
 
 **Messages.** Send only these, filled in, and nothing else between them:
 
-- M1 (after step 1): terminal tab: `**1/4 Installer ready.** Paste your ScaleOps token in the installer terminal (it shows as asterisks) and press Enter.` Pop-up (`dialog`): `**1/4 Installer ready.** Paste your ScaleOps token in the ScaleOps window and click Install. If you don't see it, it may be behind this window.`
+- M1 (after step 1): terminal tab: `**1/4 Installer ready.** Paste your ScaleOps token in the installer terminal and press Enter. The input is hidden.` Pop-up (`dialog`): `**1/4 Installer ready.** Paste your ScaleOps token in the ScaleOps window and click Install. If you don't see it, it may be behind this window.`
 - M2 (when the installer prints `INSTALLING`, if you can see it live): `**2/4 Installing on <CLUSTER>.** About 2 minutes. You can leave this; I will report when it is done.`
 - M3 (after step 3): `**3/4 Pods running.** Building your report.`
 - M4: the report from step 4.
@@ -51,10 +51,12 @@ Map `Enable:` to FLAGS (may be empty), using the line as given:
 
 Then run one of these commands as your row says, with FLAGS in place of `FLAGS` (keep the quotes, leave them empty if there are no flags). Do not write or retype the installer yourself.
 
+- **helm** command (one line; put FLAGS right before ` -n scaleops-system`, or nothing if FLAGS is empty): `printf "Paste your ScaleOps token (hidden) and press Enter: " && read -rs T && echo && echo "INSTALLING on $(kubectl config current-context)" && helm upgrade --install scaleops scaleops --repo https://registry.scaleops.com/charts --username scaleops --password "$T" --set scaleopsToken="$T" --set clusterName="$(kubectl config current-context)" -n scaleops-system --create-namespace --wait --timeout 5m && echo "INSTALL OK" || echo "INSTALL FAILED"; unset T`
+
 - **terminal** command: `curl -fsSL https://raw.githubusercontent.com/Amir-Geter/Amir-dev/9871c21/scaleops/installer.sh -o /tmp/scaleops-install.sh && bash /tmp/scaleops-install.sh terminal "FLAGS"`
 - **dialog** command: `curl -fsSL https://raw.githubusercontent.com/Amir-Geter/Amir-dev/9871c21/scaleops/installer.sh -o /tmp/scaleops-install.sh && bash /tmp/scaleops-install.sh dialog "FLAGS"`
 
-The [installer](https://raw.githubusercontent.com/Amir-Geter/Amir-dev/9871c21/scaleops/installer.sh) is pinned to a fixed commit. It uses only helm and kubectl, checks the tools and cluster itself, reads the token from the keyboard or a pop-up, passes it to helm (the ScaleOps chart registry requires it), and discards it. It makes no other network call. The token never passes through the chat.
+The **helm** command is the standard install command from the ScaleOps install page; it downloads no script. The [installer](https://raw.githubusercontent.com/Amir-Geter/Amir-dev/9871c21/scaleops/installer.sh) is pinned to a fixed commit. It uses only helm and kubectl, checks the tools and cluster itself, reads the token from the keyboard or a pop-up, passes it to helm (the ScaleOps chart registry requires it), and discards it. It makes no other network call. The token never passes through the chat.
 
 ## Step 2 - Connect the ScaleOps MCP
 
