@@ -86,7 +86,7 @@ echo "  INSTALL OK"
 Then read the terminal output:
 - `TOKEN REJECTED`: tell the user the token was not accepted and run the installer again.
 - `INSTALL FAILED`: show the lines after it and stop.
-- `INSTALL OK`: continue.
+- `INSTALL OK`: continue. In Claude Code, hide the Terminal panel now with the close-pane tool (pane `terminal`) so the chat is back in front; leave the tab itself open, the user may want the log.
 
 Delete the temp file afterwards.
 
