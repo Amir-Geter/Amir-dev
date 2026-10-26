@@ -19,14 +19,14 @@ Do nothing that is not in a step. Do not re-read this page, re-check what the in
 | You are | Launch the installer (step 2) | Connect the MCP (step 3) | Read the result (step 4) |
 |---|---|---|---|
 | Claude Code desktop app | Terminal panel tool: run `bash <path>` in a new tab titled "ScaleOps installer", then show-pane tool with pane `terminal` and that tab id | Registry first, then `~/.claude.json` (see step 3) | Read-terminal tool on that tab, 60 s waits |
-| Claude Code in a terminal | You cannot type into it. Tell the user to run `bash <path>` in a second terminal window | `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp` | Ask the user to say "done" and paste the last 3 lines |
-| Cursor | Run `bash <path>` with your terminal tool, in the foreground, not as a background job. Tell the user to click into that terminal to paste | Add `"scaleops": {"url": "https://WORKSPACE.scaleops.com/mcp"}` under `mcpServers` in `~/.cursor/mcp.json`, creating the file or key if needed and keeping other entries | The command returns when the install ends; read its last lines |
+| Claude Code in a terminal | You cannot type into it. Tell the user to run `bash <path>` in a second terminal window | `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp` | Read `/tmp/scaleops-install.status` every 30 s |
+| Cursor | Your terminal is read-only, so do not run it yourself. Tell the user: open the terminal panel (View, Terminal), run `bash <path>`, paste the token there | Add `"scaleops": {"url": "https://WORKSPACE.scaleops.com/mcp"}` under `mcpServers` in `~/.cursor/mcp.json`, creating the file or key if needed and keeping other entries | Read `/tmp/scaleops-install.status` every 30 s |
 | Codex | Run `bash <path>` in the integrated terminal | Tell the user to add `https://WORKSPACE.scaleops.com/mcp` to their Codex MCP config | Read the command output when it returns |
-| Anything else | Tell the user to run `bash <path>` in their terminal | Give the user the MCP URL `https://WORKSPACE.scaleops.com/mcp` | Ask the user to paste the last 3 lines |
+| Anything else | Tell the user to run `bash <path>` in their terminal | Give the user the MCP URL `https://WORKSPACE.scaleops.com/mcp` | Read `/tmp/scaleops-install.status` every 30 s if you can read files; otherwise ask the user to paste the last 3 lines |
 
 **Messages.** Send only these, filled in, and nothing else between them:
 
-- M1 (after step 2): `**1/4 Installer ready.** Paste your ScaleOps token in the installer terminal (it shows as asterisks) and press Enter.`
+- M1 (after step 2): `**1/4 Installer ready.** Paste your ScaleOps token in the installer terminal (it shows as asterisks) and press Enter.` If the user has to run it themselves, use instead: `**1/4 Installer ready.** Open your terminal, run the command below, paste your ScaleOps token (it shows as asterisks) and press Enter. I will follow the progress from here.` followed by the command in a code block.
 - M2 (when the installer prints `INSTALLING`, if you can see it live): `**2/4 Installing on <CLUSTER>.** About 2 minutes. You can leave this; I will report when it is done.`
 - M3 (after step 4): `**3/4 Pods running.** Building your report.`
 - M4: the report from step 5.
@@ -55,14 +55,17 @@ Save this script to a temp file, replacing `__FLAGS__` with FLAGS. It uses only 
 set -u
 FLAGS="__FLAGS__"
 REPO="https://registry.scaleops.com/charts"
+STATUS=/tmp/scaleops-install.status   # progress markers only, never the token
+: > "$STATUS"
+say() { echo "  $1"; echo "$1" >> "$STATUS"; }
 echo
 echo "  ScaleOps installer"
 echo "  ------------------"
-command -v kubectl >/dev/null 2>&1 || { echo "  MISSING kubectl - install it from kubernetes.io and run again"; exit 1; }
-command -v helm    >/dev/null 2>&1 || { echo "  MISSING helm - install it from helm.sh and run again"; exit 1; }
-CLUSTER=$(kubectl config current-context 2>/dev/null) || { echo "  NO CLUSTER - no current kube context"; exit 1; }
+command -v kubectl >/dev/null 2>&1 || { say "MISSING kubectl - install it from kubernetes.io and run again"; exit 1; }
+command -v helm    >/dev/null 2>&1 || { say "MISSING helm - install it from helm.sh and run again"; exit 1; }
+CLUSTER=$(kubectl config current-context 2>/dev/null) || { say "NO CLUSTER - no current kube context"; exit 1; }
 NODES=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
-[ "${NODES:-0}" -gt 0 ] || { echo "  NO CLUSTER - $CLUSTER is unreachable"; exit 1; }
+[ "${NODES:-0}" -gt 0 ] || { say "NO CLUSTER - $CLUSTER is unreachable"; exit 1; }
 echo "  Cluster   : $CLUSTER ($NODES nodes)"
 echo "  Options   : ${FLAGS:-AI SRE Agent (default)}"
 echo
@@ -78,20 +81,20 @@ while IFS= read -rs -n1 ch; do
 done
 echo
 TOKEN=$(printf '%s' "$TOKEN" | LC_ALL=C tr -cd 'A-Za-z0-9_.:-')   # keep printable token characters only
-if [ -z "$TOKEN" ]; then echo "  TOKEN MISSING"; exit 2; fi
+if [ -z "$TOKEN" ]; then say "TOKEN MISSING"; exit 2; fi
 printf "  Validating token ... "
 if helm show chart scaleops --repo "$REPO" --username scaleops --password "$TOKEN" >/dev/null 2>&1; then
   echo "ok"
 else
-  echo; echo "  TOKEN REJECTED - copy it again from the install page"; unset TOKEN; exit 3
+  echo; say "TOKEN REJECTED - copy it again from the install page"; unset TOKEN; exit 3
 fi
-echo "  INSTALLING"
+say "INSTALLING on $CLUSTER"
 if helm upgrade --install scaleops scaleops --repo "$REPO" --username scaleops --password "$TOKEN" \
   --create-namespace -n scaleops-system --set scaleopsToken="$TOKEN" \
   --set clusterName="$CLUSTER" $FLAGS >/tmp/scaleops-helm.log 2>&1; then
   echo "  Chart installed"
 else
-  echo; echo "  INSTALL FAILED"; tail -5 /tmp/scaleops-helm.log; unset TOKEN; exit 4
+  echo; say "INSTALL FAILED"; tail -5 /tmp/scaleops-helm.log | tee -a "$STATUS"; unset TOKEN; exit 4
 fi
 unset TOKEN
 echo "  Starting components"
@@ -100,8 +103,8 @@ for d in scaleops-admissions scaleops-agent scaleops-recommender scaleops-update
   if kubectl rollout status deploy/$d -n scaleops-system --timeout=240s >/dev/null 2>&1; then echo "ready"; else echo "not ready"; fi
 done
 echo
-echo "  INSTALL OK"
-echo "  CLUSTER=$CLUSTER NODES=$NODES"
+say "INSTALL OK"
+say "CLUSTER=$CLUSTER NODES=$NODES"
 ```
 
 ## Step 2 - Launch the installer
@@ -118,7 +121,7 @@ Use your row's "Connect" cell. Claude Code desktop app only: first search the MC
 
 ## Step 4 - Wait for the install
 
-Done when: the installer printed `INSTALL OK`, and you sent M3.
+Done when: the installer printed `INSTALL OK`, and you sent M3. The status file `/tmp/scaleops-install.status` holds the same lines as the terminal, without the token; it is reset each time the installer starts.
 
 Use your row's "Read" cell. Act on the first of these lines that appears:
 
