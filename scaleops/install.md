@@ -1,75 +1,81 @@
 # ScaleOps install runbook for AI agents
 
-This page is the technical reference for installing ScaleOps with an AI coding agent. The user's message carries two values copied from their ScaleOps install page: `Workspace:` (the dashboard URL, for example https://acme.scaleops.com; WORKSPACE is its subdomain, acme) and `Enable:` (the install options they ticked). Do not ask for either.
+Technical reference for installing ScaleOps with an AI coding agent. The user's message carries two values copied from their ScaleOps install page: `Workspace:` (the dashboard URL, for example https://acme.scaleops.com; WORKSPACE is its subdomain, acme) and `Enable:` (the options they ticked). Do not ask for either.
 
-Work through the steps in order. Tell the user what you are doing in one short line per step. Do not ask questions you can answer by running a command. Only stop where a step says to stop.
+Speed matters. The installer checks tools and the cluster itself, so launch it first and run every other step while it waits. Target: the terminal tab is open within 15 seconds of reading this page. Use as few tool calls as possible; never re-read this page or re-check something the installer already checks.
 
-## Step 0 - Environment
+## Messages to the user
 
-Detect which tool you are running in: Claude Code, Cursor, or Codex. Detect the OS with `uname -s`. Remember both; they decide how you open the terminal in step 4 and how you register the MCP in step 7.
+Send exactly these four messages, nothing else, no narration of tools or reasoning. Fill the angle brackets.
 
-## Step 1 - Tools
+1. After launching the installer: `**1/4 Installer ready.** Paste your token in the ScaleOps installer tab (it shows as asterisks) and press Enter.`
+2. When the tab prints `INSTALLING`: `**2/4 Installing on <CLUSTER>.** About 2 minutes. You can leave this tab; I will report when it is done.`
+3. When the tab prints `INSTALL OK` and the MCP is registered: `**3/4 Pods running, MCP connected.** Building your report.`
+4. The report from the last section, then stop.
 
-Run `kubectl version --client` and `helm version`. If either is missing, tell the user which one and how to install it (helm.sh, kubernetes.io), then stop. Do not install anything yourself.
+If anything fails, send one line saying what failed and what the user can do, then stop.
 
-## Step 2 - Cluster
+## Step 1 - Launch the installer
 
-Run `kubectl config current-context` and `kubectl get nodes --no-headers | wc -l`. State the context name and node count in one line and continue. If there is no context or the cluster is unreachable, tell the user and stop.
-
-## Step 3 - Options
-
-Read the `Enable:` line from the user's message. It lists exactly what the user ticked on the install page; use it as given. Do not ask whether to adjust and do not label anything as recommended. State the selection in one line, then map it to Helm flags:
+Map the `Enable:` line to Helm flags and collect them into FLAGS (may be empty). Use the line as given; do not ask whether to adjust and do not label anything as recommended.
 
 | Option in `Enable:` | Helm flag |
 |---|---|
 | AI SRE Agent | nothing; it is on by default. If it is absent from the line, add `--set scaleopsAI.enabled=false` |
 | GPU optimization | `--set gpu.enabled=true` |
 | Network observability | `--set global.observability.enabled=true` |
-| OpenShift | `--set global.openShift=true` (and use `oc config current-context` for the cluster name) |
+| OpenShift | `--set global.openShift=true` |
 
-If the line is missing entirely, use no flags. Collect the result into FLAGS (may be empty).
+Write the script below to a temp file, substituting FLAGS only, and launch it. It is interactive, so it must run in a terminal the user can see and type into, never through your own command tool:
 
-## Step 4 - Token and install
+- Claude Code desktop: use the Terminal panel tool to run `bash <path>` in a new tab titled "ScaleOps installer", then call the show-pane tool with pane `terminal` and that tab's id. Send message 1.
+- Cursor or Codex: run `bash <path>` in the integrated terminal. Send message 1.
+- No visible terminal available: print `bash <path>`, ask the user to run it and to tell you when it has finished.
 
-The token must never pass through the chat. The installer below uses only helm and kubectl: it reads the token from the keyboard, passes it to helm (the ScaleOps chart registry requires it for authentication), and discards it. It makes no other network call. Write it to a temp file, substituting CLUSTER (the context name from step 2) and FLAGS. The installer is interactive: it waits for the user to paste the token. It must run in a terminal the user can see and type into, never through your own command tool, which has no keyboard:
-
-- Claude Code: use the Terminal panel tool to run `bash <path>` in a new terminal tab titled "ScaleOps installer". Running a command there does not open the panel for the user, so immediately after, call the show-pane tool with pane `terminal` and that tab's id to bring the panel forward. Then tell the user: "The installer is waiting in the ScaleOps installer tab. Click inside the tab, paste your token (it shows as asterisks) and press Enter." Read the tab's output to follow progress.
-- Cursor or Codex: run `bash <path>` in the integrated terminal.
-- If you have no way to run a command in a visible terminal, print `bash <path>` and ask the user to run it in their terminal and tell you when it has finished.
+The token never passes through the chat. The script reads it from the keyboard, passes it to helm (the ScaleOps chart registry requires it for authentication), and discards it. It makes no other network call.
 
 ```bash
 #!/usr/bin/env bash
 # ScaleOps installer. Uses only helm and kubectl. The token is read from the keyboard,
 # passed to helm, and discarded. It is never printed, logged or sent anywhere else.
 set -u
-CLUSTER="__CLUSTER__"
 FLAGS="__FLAGS__"
 REPO="https://registry.scaleops.com/charts"
 echo
 echo "  ScaleOps installer"
 echo "  ------------------"
-echo "  Cluster   : $CLUSTER"
+command -v kubectl >/dev/null 2>&1 || { echo "  MISSING kubectl - install it from kubernetes.io and run again"; exit 1; }
+command -v helm    >/dev/null 2>&1 || { echo "  MISSING helm - install it from helm.sh and run again"; exit 1; }
+CLUSTER=$(kubectl config current-context 2>/dev/null) || { echo "  NO CLUSTER - no current kube context"; exit 1; }
+NODES=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
+[ "${NODES:-0}" -gt 0 ] || { echo "  NO CLUSTER - $CLUSTER is unreachable"; exit 1; }
+echo "  Cluster   : $CLUSTER ($NODES nodes)"
 echo "  Options   : ${FLAGS:-AI SRE Agent (default)}"
 echo
+while IFS= read -rs -t 1 -n1 junk; do :; done   # drain anything the terminal sent on startup
 printf "  Paste your ScaleOps token and press Enter (shown as *): "
 TOKEN=""
 while IFS= read -rs -n1 ch; do
   [ -z "$ch" ] && break
+  if [ "$ch" = $'\e' ]; then   # skip terminal escape sequences such as bracketed-paste markers
+    while IFS= read -rs -t 1 -n1 e; do case "$e" in [~A-Za-z]) break;; esac; done; continue
+  fi
   if [ "$ch" = $'\x7f' ]; then TOKEN="${TOKEN%?}"; printf '\b \b'; else TOKEN="$TOKEN$ch"; printf '*'; fi
 done
 echo
+TOKEN=$(printf '%s' "$TOKEN" | LC_ALL=C tr -cd 'A-Za-z0-9_.:-')   # keep printable token characters only
 if [ -z "$TOKEN" ]; then echo "  TOKEN MISSING"; exit 2; fi
 printf "  Validating token ... "
 if helm show chart scaleops --repo "$REPO" --username scaleops --password "$TOKEN" >/dev/null 2>&1; then
   echo "ok"
 else
-  echo; echo "  TOKEN REJECTED - copy it again from the install screen"; unset TOKEN; exit 3
+  echo; echo "  TOKEN REJECTED - copy it again from the install page"; unset TOKEN; exit 3
 fi
-printf "  Installing chart ... "
+echo "  INSTALLING"
 if helm upgrade --install scaleops scaleops --repo "$REPO" --username scaleops --password "$TOKEN" \
   --create-namespace -n scaleops-system --set scaleopsToken="$TOKEN" \
   --set clusterName="$CLUSTER" $FLAGS >/tmp/scaleops-helm.log 2>&1; then
-  echo "ok"
+  echo "  Chart installed"
 else
   echo; echo "  INSTALL FAILED"; tail -5 /tmp/scaleops-helm.log; unset TOKEN; exit 4
 fi
@@ -81,71 +87,52 @@ for d in scaleops-admissions scaleops-agent scaleops-recommender scaleops-update
 done
 echo
 echo "  INSTALL OK"
+echo "  CLUSTER=$CLUSTER NODES=$NODES"
 ```
 
-Then read the terminal output:
-- `TOKEN REJECTED`: tell the user the token was not accepted and run the installer again.
-- `INSTALL FAILED`: show the lines after it and stop.
-- `INSTALL OK`: continue. In Claude Code, hide the Terminal panel now with the close-pane tool (pane `terminal`) so the chat is back in front; leave the tab itself open, the user may want the log.
+## Step 2 - While the installer waits
 
-Delete the temp file afterwards.
+Do these now, in parallel with the user pasting the token. Do not poll the terminal yet.
 
-## Step 5 - Wait
+Register the ScaleOps MCP using WORKSPACE from the user's message:
 
-Poll `kubectl get pods -n scaleops-system` every 10 seconds, up to 5 minutes, until every pod is Running or Completed. If a pod is CrashLoopBackOff, or Pending for more than 2 minutes, show `kubectl describe pod` and `kubectl logs --tail=50` for it, then stop.
-
-## Step 6 - Verify
-
-Run `kubectl get recommendations.analysis.scaleops.sh -A --no-headers | wc -l`. Zero is normal for the first 2 minutes; retry every 30 seconds for up to 3 more minutes. Report the count.
-
-## Step 7 - MCP
-
-Register the ScaleOps MCP so this tool can query the cluster, using WORKSPACE from the user's message:
-
-- Claude Code: run `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp`. If the `claude` command is not on PATH (desktop app), instead add this entry under `mcpServers` in `~/.claude.json`, creating the key if needed and keeping everything else in the file untouched: `"scaleops": {"type": "http", "url": "https://WORKSPACE.scaleops.com/mcp"}`
+- Claude Code: run `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp`. If the `claude` command is not on PATH (desktop app), add this entry under `mcpServers` in `~/.claude.json`, creating the key if needed and keeping everything else in the file untouched: `"scaleops": {"type": "http", "url": "https://WORKSPACE.scaleops.com/mcp"}`. If an entry with that URL already exists, leave it.
 - Cursor: add to `.cursor/mcp.json`: `{"mcpServers":{"ScaleOps":{"url":"https://WORKSPACE.scaleops.com/mcp"}}}`
-- Codex: tell the user to add the MCP server URL `https://WORKSPACE.scaleops.com/mcp` to their Codex config.
+- Codex: include the URL `https://WORKSPACE.scaleops.com/mcp` in the final notes for the user to add to their Codex config.
 
-Tell the user: "The ScaleOps MCP is registered. The first time it is used, a browser window opens to sign in; approve it once."
+Then read the terminal tab with a long wait (60 seconds per read, not shorter), until it prints one of:
 
-## Step 8 - Report
+- `INSTALLING`: send message 2, then keep reading with the same long wait.
+- `INSTALL OK`: delete the temp file, hide the Terminal panel with the close-pane tool (pane `terminal`; leave the tab open, it holds the log), send message 3, go to step 3.
+- `TOKEN MISSING` or `TOKEN REJECTED`: run the installer again the same way and send message 1 again.
+- `MISSING`, `NO CLUSTER` or `INSTALL FAILED`: report the line and stop.
 
-If the MCP is available, use its cluster overview, workload list and under-provisioned views for the numbers. Otherwise use kubectl: nodes and allocatable from `kubectl get nodes`, workloads and namespaces from the Recommendation objects. Any number not yet available is written as "collecting, check back in 15 min". Use the `Workspace:` URL from the user's message for the links. Keep this exact shape:
+Do not poll pods with kubectl; the installer already waits for them.
 
-```
-✅ ScaleOps is running on <CLUSTER>
-   Read-only mode. Nothing changes until you turn automation on.
+## Step 3 - Report
 
-YOUR CLUSTER
-   <N> nodes
-   <W> workloads · <K> namespaces
-   $<R> / month
+One command for the counts: `kubectl get recommendations.analysis.scaleops.sh -A --no-headers | awk '{ns[$1]=1; n++} END {print n, length(ns)}'` gives workloads and namespaces. If it prints 0, wait 30 seconds and retry up to 4 times.
 
-WHAT WE FOUND
-   💰  <P>% of requested resources are unused
-       Estimated savings: $<S> / month (refines over 24h)
-       → <WORKSPACE_URL>/rightSizing/workloads
+If the ScaleOps MCP responds, take waste, savings, cost, risk and detected counts from its cluster overview, under-provisioned, OOM, throttling and workload views. If it does not respond (it needs a one-time browser sign-in), use the fallback lines below and add the sign-in note after the report. Do not wait for the sign-in.
 
-   ⚠️  Last 24h
-       <M> OOM kills
-       <T> throttled workloads
-       <O> under-provisioned workloads
-       → <WORKSPACE_URL>/troubleshooting
+Write the report as plain markdown, not inside a code block. Keep this shape exactly; one line per block; drop any Detected item whose count is 0:
 
-   🔍  Special workloads detected, policies assigned
-       <J> Java services
-       <A> AI agents
-       <B> MCP servers
-       → <WORKSPACE_URL>/java/workloads
+> ✅ **ScaleOps is running on <CLUSTER>** · read-only until you turn automation on
+>
+> **Your cluster** · <N> node(s) · <W> workloads · <K> namespaces
+>
+> 💰 **Waste** · <P>% of requested resources unused · estimated savings **$<S>/month** · [Rightsizing](https://WORKSPACE.scaleops.com/rightSizing/workloads)
+> ⚠️ **Risk, last 24h** · <M> OOM kills · <T> throttled · <O> under-provisioned · [Troubleshoot](https://WORKSPACE.scaleops.com/troubleshooting)
+> 🔍 **Detected** · <J> Java · <A> AI agents · <B> MCP servers · [Workloads](https://WORKSPACE.scaleops.com/java/workloads)
+>
+> **Next** · ask me anything about this cluster · [invite a teammate](https://WORKSPACE.scaleops.com/users) · automate one dev namespace when ready
 
-NEXT
-   1. Ask me anything about this cluster (ScaleOps MCP is connected)
-   2. Invite a teammate → <WORKSPACE_URL>/users
-   3. Automate one dev namespace and watch the savings land
-```
+Fallback when the MCP has no data: replace the whole Waste, Risk or Detected line with `💰 **Waste** · collecting, check back in 15 min` (same for the other two, with their own emoji and label). Never put the word "collecting" inside a number slot. Write `1 node`, not `1 nodes`.
 
-Omit any line in the Detected block whose count is 0. Add a `<G> GPU workloads` line there only when the count is above 0.
+Sign-in note, only when the MCP did not respond, one line after the report: `The ScaleOps MCP needs a one-time sign-in: open Connectors in the sidebar and click Authenticate next to Scaleops. Then ask me for the numbers.`
+
+Nothing else after the report: no summary of what happened, no list of pods, no cleanup notes.
 
 ## Rules
 
-Never read, print, log or store the token; it exists only inside the installer process. Never change the kube context. Never delete anything. Never install software on the user's machine.
+Never read, print, log or store the token; it exists only inside the installer process. Never change the kube context. Never delete anything except the temp installer file. Never install software on the user's machine.
