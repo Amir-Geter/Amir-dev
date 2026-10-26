@@ -108,18 +108,38 @@ Tell the user: "The ScaleOps MCP is registered. The first time it is used, a bro
 If the MCP is available, use its cluster overview, workload list and under-provisioned views for the numbers. Otherwise use kubectl: nodes and allocatable from `kubectl get nodes`, workloads and namespaces from the Recommendation objects. Any number not yet available is written as "collecting, check back in 15 min". Use the `Workspace:` URL from the user's message for the links. Keep this exact shape:
 
 ```
-ScaleOps is running on <CLUSTER>. Read-only: nothing changes until you turn automation on.
+✅ ScaleOps is running on <CLUSTER>
+   Read-only mode. Nothing changes until you turn automation on.
 
-Cluster    <N> nodes, <X> vCPU / <Y> GB allocatable, <W> workloads in <K> namespaces.
-Waste      <P>% of requested CPU and memory unused. First savings estimate $<S>/month, refines over 24h.  -> <DASHBOARD>/rightSizing/workloads
-Risk       <O> under-provisioned workloads, <M> OOM kills, <T> throttled in the last 24h.                  -> <DASHBOARD>/troubleshooting
-Detected   <A> AI agents, <B> MCP servers, <J> Java services, <G> GPU workloads. Policies assigned.      -> <DASHBOARD>/java/workloads
+YOUR CLUSTER
+   <N> nodes
+   <W> workloads · <K> namespaces
+   $<R> / month
 
-Next steps
-1. Ask me anything about this cluster. The ScaleOps MCP is connected.
-2. Invite a teammate: <DASHBOARD>/users
-3. When ready, automate one dev namespace and watch the savings land.
+WHAT WE FOUND
+   💰  <P>% of requested resources are unused
+       Estimated savings: $<S> / month (refines over 24h)
+       → <WORKSPACE_URL>/rightSizing/workloads
+
+   ⚠️  Last 24h
+       <M> OOM kills
+       <T> throttled workloads
+       <O> under-provisioned workloads
+       → <WORKSPACE_URL>/troubleshooting
+
+   🔍  Special workloads detected, policies assigned
+       <J> Java services
+       <A> AI agents
+       <B> MCP servers
+       → <WORKSPACE_URL>/java/workloads
+
+NEXT
+   1. Ask me anything about this cluster (ScaleOps MCP is connected)
+   2. Invite a teammate → <WORKSPACE_URL>/users
+   3. Automate one dev namespace and watch the savings land
 ```
+
+Omit any line in the Detected block whose count is 0. Add a `<G> GPU workloads` line there only when the count is above 0.
 
 ## Rules
 
