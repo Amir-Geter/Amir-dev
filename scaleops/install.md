@@ -1,38 +1,52 @@
 # ScaleOps install runbook for AI agents
 
-Technical reference for installing ScaleOps with an AI coding agent. The user's message carries two values copied from their ScaleOps install page: `Workspace:` (the dashboard URL, for example https://acme.scaleops.com; WORKSPACE is its subdomain, acme) and `Enable:` (the options they ticked). Do not ask for either.
+## START HERE
 
-Speed matters. The installer checks tools and the cluster itself, so launch it first and run every other step while it waits. Target: the terminal tab is open within 15 seconds of reading this page. Use as few tool calls as possible; never re-read this page or re-check something the installer already checks.
+You are installing ScaleOps on the user's current Kubernetes cluster. There are exactly **5 steps**. Before doing anything else, create a to-do list with these five items, then work through them in order and tick each one off:
 
-## Messages to the user
+1. Write the installer
+2. Launch the installer
+3. Connect the ScaleOps MCP
+4. Wait for the install
+5. Report, then stop
 
-Send exactly these four messages, nothing else, no narration of tools or reasoning. Fill the angle brackets.
+Do nothing that is not in a step. Do not re-read this page, re-check what the installer checks, or explore the machine. After step 5, the task is finished: stop.
 
-1. After launching the installer: `**1/4 Installer ready.** Paste your token in the ScaleOps installer tab (it shows as asterisks) and press Enter.`
-2. When the tab prints `INSTALLING`: `**2/4 Installing on <CLUSTER>.** About 2 minutes. You can leave this tab; I will report when it is done.`
-3. When the tab prints `INSTALL OK` and the MCP is registered: `**3/4 Pods running, MCP connected.** Building your report.`
-4. The report from the last section, then stop.
+**Inputs** from the user's message: `Workspace:` is the dashboard URL (for example https://acme.scaleops.com; WORKSPACE is its subdomain, acme). `Enable:` lists the options the user ticked. Do not ask for either.
 
-If anything fails, send one line saying what failed and what the user can do, then stop.
+**Your tool.** Find your row once and use only that row everywhere below.
 
-## Step 1 - Launch the installer
+| You are | Launch the installer (step 2) | Connect the MCP (step 3) | Read the result (step 4) |
+|---|---|---|---|
+| Claude Code desktop app | Terminal panel tool: run `bash <path>` in a new tab titled "ScaleOps installer", then show-pane tool with pane `terminal` and that tab id | Registry first, then `~/.claude.json` (see step 3) | Read-terminal tool on that tab, 60 s waits |
+| Claude Code in a terminal | You cannot type into it. Tell the user to run `bash <path>` in a second terminal window | `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp` | Ask the user to say "done" and paste the last 3 lines |
+| Cursor | Run `bash <path>` with your terminal tool, in the foreground, not as a background job. Tell the user to click into that terminal to paste | Add `"scaleops": {"url": "https://WORKSPACE.scaleops.com/mcp"}` under `mcpServers` in `~/.cursor/mcp.json`, creating the file or key if needed and keeping other entries | The command returns when the install ends; read its last lines |
+| Codex | Run `bash <path>` in the integrated terminal | Tell the user to add `https://WORKSPACE.scaleops.com/mcp` to their Codex MCP config | Read the command output when it returns |
+| Anything else | Tell the user to run `bash <path>` in their terminal | Give the user the MCP URL `https://WORKSPACE.scaleops.com/mcp` | Ask the user to paste the last 3 lines |
 
-Map the `Enable:` line to Helm flags and collect them into FLAGS (may be empty). Use the line as given; do not ask whether to adjust and do not label anything as recommended.
+**Messages.** Send only these, filled in, and nothing else between them:
+
+- M1 (after step 2): `**1/4 Installer ready.** Paste your ScaleOps token in the installer terminal (it shows as asterisks) and press Enter.`
+- M2 (when the installer prints `INSTALLING`, if you can see it live): `**2/4 Installing on <CLUSTER>.** About 2 minutes. You can leave this; I will report when it is done.`
+- M3 (after step 4): `**3/4 Pods running.** Building your report.`
+- M4: the report from step 5.
+
+On any failure send one line, what failed and what the user can do, and stop.
+
+## Step 1 - Write the installer
+
+Done when: the script is saved to a temp file.
+
+Map `Enable:` to Helm flags and collect them into FLAGS (may be empty). Use the line as given; do not ask about it.
 
 | Option in `Enable:` | Helm flag |
 |---|---|
-| AI SRE Agent | nothing; it is on by default. If it is absent from the line, add `--set scaleopsAI.enabled=false` |
+| AI SRE Agent | nothing, it is on by default. If it is absent, add `--set scaleopsAI.enabled=false` |
 | GPU optimization | `--set gpu.enabled=true` |
 | Network observability | `--set global.observability.enabled=true` |
 | OpenShift | `--set global.openShift=true` |
 
-Write the script below to a temp file, substituting FLAGS only, and launch it. It is interactive, so it must run in a terminal the user can see and type into, never through your own command tool:
-
-- Claude Code desktop: use the Terminal panel tool to run `bash <path>` in a new tab titled "ScaleOps installer", then call the show-pane tool with pane `terminal` and that tab's id. Send message 1.
-- Cursor or Codex: run `bash <path>` in the integrated terminal. Send message 1.
-- No visible terminal available: print `bash <path>`, ask the user to run it and to tell you when it has finished.
-
-The token never passes through the chat. The script reads it from the keyboard, passes it to helm (the ScaleOps chart registry requires it for authentication), and discards it. It makes no other network call.
+Save this script to a temp file, replacing `__FLAGS__` with FLAGS. It uses only helm and kubectl, checks the tools and cluster itself, reads the token from the keyboard, passes it to helm (the ScaleOps chart registry requires it), and discards it. It makes no other network call. The token never passes through the chat.
 
 ```bash
 #!/usr/bin/env bash
@@ -90,33 +104,42 @@ echo "  INSTALL OK"
 echo "  CLUSTER=$CLUSTER NODES=$NODES"
 ```
 
-## Step 2 - While the installer waits
+## Step 2 - Launch the installer
 
-Do these now, in parallel with the user pasting the token. Do not poll the terminal yet.
+Done when: the installer is running where the user can type, and you sent M1.
 
-Register the ScaleOps MCP using WORKSPACE from the user's message:
+Use your row's "Launch" cell. The installer is interactive, so never run it through a tool the user cannot type into. Target: this happens within 15 seconds of reading this page.
 
-- Claude Code desktop with the connector registry tools: search the MCP registry for `scaleops`. If a result's url contains `WORKSPACE.scaleops.com` (or is `https://mcp.scaleops.com`), remember its directory id and skip the bullet below; in step 3 you will show its Connect card. Otherwise use the next bullet.
-- Claude Code: run `claude mcp add --transport http scaleops https://WORKSPACE.scaleops.com/mcp`. If the `claude` command is not on PATH (desktop app), add this entry under `mcpServers` in `~/.claude.json`, creating the key if needed and keeping everything else in the file untouched: `"scaleops": {"type": "http", "url": "https://WORKSPACE.scaleops.com/mcp"}`. If an entry with that URL already exists, leave it.
-- Cursor: add to `.cursor/mcp.json`: `{"mcpServers":{"ScaleOps":{"url":"https://WORKSPACE.scaleops.com/mcp"}}}`
-- Codex: include the URL `https://WORKSPACE.scaleops.com/mcp` in the final notes for the user to add to their Codex config.
+## Step 3 - Connect the ScaleOps MCP
 
-Then read the terminal tab with a long wait (60 seconds per read, not shorter), until it prints one of:
+Done when: the MCP entry exists for your tool. Do this while the user pastes the token.
 
-- `INSTALLING`: send message 2, then keep reading with the same long wait.
-- `INSTALL OK`: delete the temp file, hide the Terminal panel with the close-pane tool (pane `terminal`; leave the tab open, it holds the log), send message 3, go to step 3.
-- `TOKEN MISSING` or `TOKEN REJECTED`: run the installer again the same way and send message 1 again.
-- `MISSING`, `NO CLUSTER` or `INSTALL FAILED`: report the line and stop.
+Use your row's "Connect" cell. Claude Code desktop app only: first search the MCP connector registry for `scaleops`; if a result's URL contains `WORKSPACE.scaleops.com`, remember its directory id for step 5 and skip the file. Otherwise add `"scaleops": {"type": "http", "url": "https://WORKSPACE.scaleops.com/mcp"}` under `mcpServers` in `~/.claude.json`, keeping everything else in the file. If an entry with that URL already exists, leave it.
 
-Do not poll pods with kubectl; the installer already waits for them.
+## Step 4 - Wait for the install
 
-## Step 3 - Report
+Done when: the installer printed `INSTALL OK`, and you sent M3.
 
-One command for the counts: `kubectl get recommendations.analysis.scaleops.sh -A --no-headers | awk '{ns[$1]=1; n++} END {print n, length(ns)}'` gives workloads and namespaces. If it prints 0, wait 30 seconds and retry up to 4 times.
+Use your row's "Read" cell. Act on the first of these lines that appears:
 
-If the ScaleOps MCP responds, take waste, savings, cost, risk and detected counts from its cluster overview, under-provisioned, OOM, throttling and workload views. If it does not respond (it needs a one-time browser sign-in), use the fallback lines below and add the sign-in note after the report. Do not wait for the sign-in.
+| Installer prints | Do |
+|---|---|
+| `INSTALLING` | Send M2, keep waiting |
+| `INSTALL OK` | Note `CLUSTER=` and `NODES=`. Delete the temp file. Claude Code desktop app: hide the terminal panel with the close-pane tool (pane `terminal`), leave the tab open. Send M3 |
+| `TOKEN MISSING` or `TOKEN REJECTED` | Launch the installer again (step 2) and send M1 again |
+| `MISSING`, `NO CLUSTER` or `INSTALL FAILED` | Report that line and stop |
 
-Write the report as plain markdown, not inside a code block. Keep this shape exactly; one line per block; drop any Detected item whose count is 0:
+Do not poll pods; the installer already waits for them.
+
+## Step 5 - Report, then stop
+
+Done when: you sent M4. Then the task is finished.
+
+Get workloads and namespaces with one command: `kubectl get recommendations.analysis.scaleops.sh -A --no-headers | awk '{ns[$1]=1; n++} END {print n, length(ns)}'`. If it prints 0, wait 30 seconds and retry, up to 4 times.
+
+If the ScaleOps MCP answers, take waste, savings, risk and detected counts from its cluster overview, under-provisioned, OOM, throttling and workload views. If it does not answer, use the fallback lines. Do not wait for it.
+
+Write the report as plain markdown, not in a code block, in exactly this shape. Drop any Detected item whose count is 0:
 
 > ✅ **ScaleOps is running on <CLUSTER>** · read-only until you turn automation on
 >
@@ -128,13 +151,14 @@ Write the report as plain markdown, not inside a code block. Keep this shape exa
 >
 > **Next** · ask me anything about this cluster · [invite a teammate](https://WORKSPACE.scaleops.com/users) · automate one dev namespace when ready
 
-Fallback when the MCP has no data: replace the whole Waste, Risk or Detected line with `💰 **Waste** · collecting, check back in 15 min` (same for the other two, with their own emoji and label). Never put the word "collecting" inside a number slot. Write `1 node`, not `1 nodes`.
+Fallback: when a line has no data, replace the whole line with its emoji and label plus `collecting, check back in 15 min`. Never put words in a number slot. Write `1 node`, not `1 nodes`.
 
-If step 2 found a ScaleOps connector in the registry and it is not connected, end with the suggest-connectors tool for that directory id (keyword `cluster`) so the app shows its Connect card, preceded by one line: `**Last step:** connect ScaleOps below so I can answer questions about this cluster.` Skip the sign-in note in that case.
+End with exactly one of these, then stop:
 
-Sign-in note, only when the MCP did not respond and no connector card was shown, one line after the report: `One click left: type /mcp here, pick scaleops and sign in (or Connectors in the sidebar, Authenticate next to Scaleops). Then ask me for the numbers.` The sign-in cannot be started by the agent; an MCP server added to `~/.claude.json` during a session is loaded by the next session, so in the desktop app the user may need to start a new session first. Say so only if `/mcp` does not list scaleops.
-
-Nothing else after the report: no summary of what happened, no list of pods, no cleanup notes.
+- Claude Code desktop app with a connector found in step 3: one line `**Last step:** connect ScaleOps below so I can answer questions about this cluster.`, then the suggest-connectors tool with that directory id (keyword `cluster`).
+- Claude Code without a connector: `**Last step:** type /mcp, pick scaleops and sign in. Then ask me anything about this cluster.`
+- Cursor: `**Last step:** open Cursor Settings, MCP, and click Login next to scaleops. Then ask me anything about this cluster.`
+- Codex or anything else: `**Last step:** add the MCP URL https://WORKSPACE.scaleops.com/mcp to your agent and sign in.`
 
 ## Rules
 
